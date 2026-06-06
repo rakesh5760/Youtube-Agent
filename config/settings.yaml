@@ -1,0 +1,13 @@
+channel:
+  language: Telugu
+  upload_time: "18:00"
+  timezone: Asia/Kolkata
+
+content:
+  duration: 10
+  audience: Kids
+  style: Cartoon
+
+buffer:
+  min_days: 7
+  max_days: 30

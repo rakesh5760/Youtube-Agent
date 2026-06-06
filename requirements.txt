@@ -1,0 +1,9 @@
+python-dotenv
+PyYAML
+groq
+playwright
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+schedule
+python-dateutil
