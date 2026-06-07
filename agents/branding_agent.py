@@ -1,6 +1,7 @@
 import sys
 import os
 import subprocess
+import json
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -10,10 +11,28 @@ class BrandingAgent:
     def __init__(self, logo_path="assets/logo.png"):
         self.logo_path = os.path.abspath(logo_path)
         
-    def add_watermark(self, input_video, output_video, position="top_right"):
+    def _get_video_dimensions(self, file_path):
+        """Uses ffprobe to get the width and height of the video."""
+        cmd = [
+            "ffprobe", "-v", "error", 
+            "-select_streams", "v:0", 
+            "-show_entries", "stream=width,height", 
+            "-of", "json", file_path
+        ]
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            data = json.loads(result.stdout)
+            width = int(data['streams'][0]['width'])
+            height = int(data['streams'][0]['height'])
+            return width, height
+        except Exception as e:
+            logger.error(f"Failed to probe video dimensions: {e}. Defaulting to 720x1280.")
+            return 720, 1280
+
+    def add_watermark(self, input_video, output_video, position="bottom_right"):
         """
         Overlays the logo onto the video using FFmpeg.
-        Positions: top_right, top_left, bottom_right, bottom_left
+        Automatically scales and positions the logo to perfectly cover the Gemini watermark.
         """
         logger.info(f"Adding branding to {input_video}...")
         
@@ -25,38 +44,52 @@ class BrandingAgent:
             logger.error(f"Logo not found at {self.logo_path}. Cannot apply branding.")
             return False
 
-        # Define position logic
-        # W = video width, H = video height
-        # w = watermark width, h = watermark height
-        # 20 is the padding in pixels from the edge
-        if position == "top_right":
-            overlay = "main_w-overlay_w-20:20"
-        elif position == "top_left":
-            overlay = "20:20"
-        elif position == "bottom_right":
-            overlay = "main_w-overlay_w-20:main_h-overlay_h-20"
-        elif position == "bottom_left":
-            overlay = "20:main_h-overlay_h-20"
+        width, height = self._get_video_dimensions(input_video)
+        
+        # Determine exact Gemini watermark dimensions and margins based on video resolution
+        if width <= 1024:
+            # e.g., 720p vertical (720x1280) -> 48x48 logo with 32px margin
+            logo_size = 48
+            margin = 32
         else:
-            overlay = "main_w-overlay_w-20:20" # Default top_right
+            # e.g., 1080p vertical (1080x1920) or higher -> 96x96 logo with 64px margin
+            logo_size = 96
+            margin = 64
             
-        # FFmpeg command
+        # We scale the logo slightly larger (+4 pixels) to ensure it completely eclipses 
+        # the underlying Gemini watermark, adjusting the margin by half that amount 
+        # to keep it perfectly centered over the original spot.
+        eclipse_padding = 4
+        final_logo_size = logo_size + eclipse_padding
+        final_margin = margin - (eclipse_padding // 2)
+
+        # Scale the logo image and overlay it at the exact coordinates
+        if position == "bottom_right":
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:main_h-overlay_h-{final_margin}"
+        elif position == "top_right":
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:{final_margin}"
+        elif position == "top_left":
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={final_margin}:{final_margin}"
+        elif position == "bottom_left":
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={final_margin}:main_h-overlay_h-{final_margin}"
+        else:
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:main_h-overlay_h-{final_margin}"
+            
         command = [
             "ffmpeg",
             "-y", # Overwrite output if exists
             "-i", input_video,
             "-i", self.logo_path,
-            "-filter_complex", f"overlay={overlay}",
+            "-filter_complex", filter_complex,
             "-c:v", "libx264", # Re-encode video using H.264
             "-preset", "fast",
-            "-crf", "23",      # Maintain good quality (lower is better, 23 is default for good quality)
+            "-crf", "23",      # Maintain good quality
             "-c:a", "copy",    # Copy audio without re-encoding
             output_video
         ]
         
         try:
-            logger.info("Running FFmpeg command...")
-            # Run the command and capture output
+            logger.info(f"Running FFmpeg to overlay {final_logo_size}x{final_logo_size} logo with {final_margin}px margin...")
             result = subprocess.run(
                 command, 
                 stdout=subprocess.PIPE, 
@@ -69,7 +102,6 @@ class BrandingAgent:
                 return True
             else:
                 logger.error(f"FFmpeg failed with exit code {result.returncode}")
-                # Log only the last few lines of the error to avoid huge logs
                 error_lines = result.stderr.strip().split('\n')
                 logger.error(f"FFmpeg error snippet: {os.linesep.join(error_lines[-5:])}")
                 return False
@@ -88,7 +120,6 @@ if __name__ == "__main__":
     print("Testing Branding Agent...")
     agent = BrandingAgent()
     
-    # We create a dummy logo for testing if it doesn't exist
     if not os.path.exists(agent.logo_path):
         os.makedirs(os.path.dirname(agent.logo_path), exist_ok=True)
         print(f"Note: Missing logo file. Place a transparent logo at {agent.logo_path} to test FFmpeg processing.")

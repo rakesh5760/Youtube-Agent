@@ -60,8 +60,8 @@ class GeminiBrowserAgent:
                 while (time.time() - start_time) < timeout_minutes * 60:
                     # Look for a download button or link inside the latest response.
                     # Since Gemini's exact DOM structure for video downloads might change,
-                    # we check for generic download hints in the latest elements.
-                    download_button = page.locator("button[aria-label*='Download'], a[download]").last
+                    # we check for generic download hints in the latest elements, including the specific mat-icon.
+                    download_button = page.locator("button[aria-label*='Download'], a[download], mat-icon[data-mat-icon-name='download']").last
                     
                     if download_button.is_visible():
                         logger.info("Download button found! Downloading video...")

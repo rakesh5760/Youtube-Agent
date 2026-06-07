@@ -30,6 +30,7 @@ class PromptAgent:
         - 10 seconds duration
         - High quality 3D cartoon style (similar to Pixar/Disney)
         - Visually appropriate for a Telugu kids audience (e.g. Indian village/city setting, characters in casual Indian wear)
+        - CRITICAL: Any spoken dialogue, voiceover, or background audio MUST be strictly in the Telugu language. Do not use English audio.
         
         Story:
         {story}

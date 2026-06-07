@@ -1,0 +1,48 @@
+{
+  "story": "రోబో రాజు తన పిల్లల ఉద్యానవనం వద్ద బలమైన గాలిని పంపిస్తుంది. ఆ గాలిలో గల ముళ్ళ మీద ఎయిర్ ప్లాంట్‌లు పుట్టి బడతాయి.",
+  "script": "రోబో రాజు ముందుకు రావడానికి నిలబడింది. ఇది అనవేషణగావించుకుంది మరియు ఇంకొక మొక్క పెరిగేలోపు గాలిలో ఎయిర్ ప్లాంట్‌లను పంపుతుంది.",
+  "video_prompt": {
+    "type": "animation",
+    "background": {
+      "color": "#33ccff",
+      "image": "a futuristic park with robotic flowers"
+    },
+    "objects": [
+      {
+        "name": "robot king",
+        "model": "a futuristic robot",
+        "texture": "metallic gray",
+        "animation": {
+          "loop": "breathing and moving its arms"
+        }
+      },
+      {
+        "name": "air plants",
+        "model": "small air plants",
+        "texture": "green",
+        "position": "on top of robotic flowers",
+        "animation": {
+          "loop": "growing and moving in the wind"
+        }
+      },
+      {
+        "name": "robotic flowers",
+        "model": "small robotic flowers",
+        "texture": "metallic green",
+        "position": "scattered around the park",
+        "animation": {
+          "loop": "moving and swaying in the wind"
+        }
+      }
+    ]
+  },
+  "title": "రోబో రాజు పిల్లల ఉద్యానవనం | బలమైన గాలిలో ఎరువులు, సకశేరుకులు పురుగులు చేయడం",
+  "description": "రోబో రాజు తన పిల్లల ఉద్యానవనంలో ముళ్ళ మీద ఎయిర్ ప్లాంట్‌లు పెంచుతూ ఉంది. దీని గాలిలో ఎరువులు, సకశేరుకులు, పురుగులు జీవిస్తుంటాయి. #రోబో #రాజు #పిల్లలఉద్యానవనం #ఎయిర్‌ప్లాంట్స",
+  "tags": [
+    "రోబో",
+    "రాజు",
+    "పిల్లల ఉద్యానవనం",
+    "ఎయిర్‌ప్లాంట్స",
+    "ఎరువులు"
+  ]
+}
