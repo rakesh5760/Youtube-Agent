@@ -14,7 +14,7 @@ class BufferAgent:
         # Read from config if present, otherwise default to requirements rules
         self.min_buffer = config.settings.get('buffer', {}).get('min_days', 7)
         self.max_buffer = config.settings.get('buffer', {}).get('max_days', 30)
-        self.trigger_threshold = 15 # Temporarily bumped to 15 so we can test the workflow!
+        self.trigger_threshold = 30 # User requested to increase buffer to 30 days
 
     def check_buffer(self, youtube_service=None):
         """

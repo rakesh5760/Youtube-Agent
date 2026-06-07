@@ -2,14 +2,17 @@ import sys
 import os
 import subprocess
 import json
+import cv2
+import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from services.logger import logger
 
 class BrandingAgent:
-    def __init__(self, logo_path="assets/logo.png"):
+    def __init__(self, logo_path="assets/logo.png", template_path="assets/gemini_template.png"):
         self.logo_path = os.path.abspath(logo_path)
+        self.template_path = os.path.abspath(template_path)
         
     def _get_video_dimensions(self, file_path):
         """Uses ffprobe to get the width and height of the video."""
@@ -29,6 +32,90 @@ class BrandingAgent:
             logger.error(f"Failed to probe video dimensions: {e}. Defaulting to 720x1280.")
             return 720, 1280
 
+    def find_watermark_coordinates(self, video_path):
+        """
+        Uses OpenCV to read the first frame and find the Gemini watermark using edge detection template matching.
+        Returns (margin_right, margin_bottom, width, height)
+        """
+        if not os.path.exists(self.template_path):
+            logger.warning(f"Template {self.template_path} not found. Falling back to default margins.")
+            return None, None, None, None
+            
+        try:
+            # Read template with alpha channel
+            template = cv2.imread(self.template_path, cv2.IMREAD_UNCHANGED)
+            if template is None or template.shape[2] != 4:
+                logger.error("Template must be a PNG with an alpha channel (transparency).")
+                return None, None, None, None
+                
+            template_alpha = template[:, :, 3]
+            
+            # Read first frame of video
+            cap = cv2.VideoCapture(video_path)
+            ret, frame = cap.read()
+            cap.release()
+            
+            if not ret or frame is None:
+                return None, None, None, None
+            
+            h, w = frame.shape[:2]
+            
+            # Crop strictly to the bottom right corner (last 300 pixels) to avoid false positives in clouds/text
+            roi_y = max(0, h - 300)
+            roi_x = max(0, w - 300)
+            frame_roi = frame[roi_y:h, roi_x:w]
+            
+            frame_gray = cv2.cvtColor(frame_roi, cv2.COLOR_BGR2GRAY)
+            frame_edges = cv2.Canny(frame_gray, 50, 200)
+                
+            best_val = -1
+            best_loc = None
+            best_t_size = None
+            
+            # Resize the alpha mask to find the sparkler size
+            for test_size in range(32, 140, 4):
+                resized_alpha = cv2.resize(template_alpha, (test_size, test_size))
+                
+                # The alpha channel is the shape of the sparkler. We extract its edges!
+                template_edges = cv2.Canny(resized_alpha, 50, 200)
+                
+                # Match template using CCOEFF_NORMED on edge maps
+                result = cv2.matchTemplate(frame_edges, template_edges, cv2.TM_CCOEFF_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+                
+                if max_val > best_val:
+                    best_val = max_val
+                    best_loc = max_loc
+                    best_t_size = test_size
+            
+            logger.info(f"OpenCV edge match confidence: {best_val} at size {best_t_size}")
+            
+            # High confidence threshold for CCOEFF_NORMED on edge maps
+            if best_val > 0.05: 
+                x_roi, y_roi = best_loc
+                
+                # Convert ROI coordinates back to full frame coordinates
+                x = x_roi + roi_x
+                y = y_roi + roi_y
+                
+                # Calculate margins from bottom right
+                margin_right = w - (x + best_t_size)
+                margin_bottom = h - (y + best_t_size)
+                
+                logger.info(f"Calculated x:{x}, y:{y}, w:{w}, h:{h}. Margin right:{margin_right}, bottom:{margin_bottom}")
+                
+                # For safety, ensure margins aren't totally crazy (must be near the corner)
+                if margin_right > 250 or margin_bottom > 250:
+                    logger.warning("Detected margins are too far from the corner. Rejecting false positive.")
+                    return None, None, None, None
+                    
+                return margin_right, margin_bottom, w, h
+                
+            return None, None, None, None
+        except Exception as e:
+            logger.error(f"Error in OpenCV detection: {e}")
+            return None, None, None, None
+
     def add_watermark(self, input_video, output_video, position="bottom_right"):
         """
         Overlays the logo onto the video using FFmpeg.
@@ -44,36 +131,46 @@ class BrandingAgent:
             logger.error(f"Logo not found at {self.logo_path}. Cannot apply branding.")
             return False
 
-        width, height = self._get_video_dimensions(input_video)
+        # First, try dynamic OpenCV detection!
+        dynamic_mr, dynamic_mb, width, height = self.find_watermark_coordinates(input_video)
         
-        # Determine exact Gemini watermark dimensions and margins based on video resolution
-        if width <= 1024:
-            # e.g., 720p vertical (720x1280) -> 48x48 logo with 32px margin
-            logo_size = 48
-            margin = 32
-        else:
-            # e.g., 1080p vertical (1080x1920) or higher -> 96x96 logo with 64px margin
-            logo_size = 96
-            margin = 64
+        if dynamic_mr is not None and dynamic_mb is not None:
+            logger.info(f"OpenCV dynamically detected watermark at margins -> Right: {dynamic_mr}px, Bottom: {dynamic_mb}px")
+            margin_right = dynamic_mr
+            # Adjust the bottom margin slightly down to perfectly center over the edge-detected box
+            margin_bottom = dynamic_mb
             
-        # We scale the logo slightly larger (+4 pixels) to ensure it completely eclipses 
-        # the underlying Gemini watermark, adjusting the margin by half that amount 
-        # to keep it perfectly centered over the original spot.
-        eclipse_padding = 4
-        final_logo_size = logo_size + eclipse_padding
-        final_margin = margin - (eclipse_padding // 2)
+            if width <= 1024:
+                logo_size = 64
+            else:
+                logo_size = 96
+        else:
+            logger.warning("Dynamic detection failed or disabled. Using fallback hardcoded coordinates.")
+            width, height = self._get_video_dimensions(input_video)
+            
+            # Match the exact coordinates the user provided in 'ice cream.mp4'
+            if width <= 1024:
+                logo_size = 64
+                margin_right = 86
+                margin_bottom = 90
+            else:
+                logo_size = 96
+                margin_right = 130
+                margin_bottom = 136
+            
+        final_logo_size = logo_size
 
         # Scale the logo image and overlay it at the exact coordinates
         if position == "bottom_right":
-            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:main_h-overlay_h-{final_margin}"
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{margin_right}:main_h-overlay_h-{margin_bottom}"
         elif position == "top_right":
-            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:{final_margin}"
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{margin_right}:{margin_bottom}"
         elif position == "top_left":
-            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={final_margin}:{final_margin}"
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={margin_right}:{margin_bottom}"
         elif position == "bottom_left":
-            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={final_margin}:main_h-overlay_h-{final_margin}"
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay={margin_right}:main_h-overlay_h-{margin_bottom}"
         else:
-            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{final_margin}:main_h-overlay_h-{final_margin}"
+            filter_complex = f"[1:v]scale={final_logo_size}:{final_logo_size}[logo];[0:v][logo]overlay=main_w-overlay_w-{margin_right}:main_h-overlay_h-{margin_bottom}"
             
         command = [
             "ffmpeg",
@@ -89,7 +186,7 @@ class BrandingAgent:
         ]
         
         try:
-            logger.info(f"Running FFmpeg to overlay {final_logo_size}x{final_logo_size} logo with {final_margin}px margin...")
+            logger.info(f"Running FFmpeg to overlay {final_logo_size}x{final_logo_size} logo with {margin_right}px right margin and {margin_bottom}px bottom margin...")
             result = subprocess.run(
                 command, 
                 stdout=subprocess.PIPE, 

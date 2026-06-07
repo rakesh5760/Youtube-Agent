@@ -49,7 +49,7 @@ def run_workflow():
     # Step 3: Optimize Prompt
     logger.info(">>> [STAGE 2] Optimizing Video Prompt")
     prompt_agent = PromptAgent()
-    video_prompt = prompt_agent.optimize_prompt(story)
+    video_prompt = prompt_agent.optimize_prompt(content)
     if not video_prompt:
         logger.warning("Prompt optimization failed, falling back to basic prompt.")
         video_prompt = content.get("video_prompt")

@@ -7,3 +7,5 @@ google-auth-oauthlib
 google-auth-httplib2
 schedule
 python-dateutil
+opencv-python
+numpy

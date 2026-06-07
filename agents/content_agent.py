@@ -31,12 +31,13 @@ class ContentAgent:
                 return json.load(f)
         return []
 
-    def _get_json_response(self, prompt):
+    def _get_json_response(self, prompt, max_tokens=2500):
         try:
             response = self.client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model,
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                max_tokens=max_tokens
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -44,8 +45,8 @@ class ContentAgent:
             return None
 
     def generate_story_ideas(self):
-        """Generates 5 story ideas."""
-        logger.info("Generating 5 story ideas...")
+        """Generates 3 story ideas."""
+        logger.info("Generating 3 story ideas...")
         prompt = f"""
         You are an expert children's content creator for YouTube Shorts.
         Language: {self.language}
@@ -53,8 +54,8 @@ class ContentAgent:
         Duration: {self.duration} seconds.
         Available characters: {json.dumps(self.characters)} (Do not use copyrighted characters like Chhota Bheem, Peppa Pig, etc).
         
-        Generate exactly 5 distinct, fun, and engaging story ideas for a 10-second vertical cartoon short.
-        You must respond in JSON format with a single key "ideas" containing a list of 5 strings.
+        Generate exactly 3 distinct, fun, and engaging story ideas for a 10-second vertical cartoon short.
+        You must respond in JSON format with a single key "ideas" containing a list of 3 strings.
         Example:
         {{
             "ideas": [
@@ -63,7 +64,7 @@ class ContentAgent:
             ]
         }}
         """
-        result = self._get_json_response(prompt)
+        result = self._get_json_response(prompt, max_tokens=800)
         if result and "ideas" in result:
             return result["ideas"]
         return []
@@ -88,15 +89,25 @@ class ContentAgent:
             ]
         }}
         """
-        result = self._get_json_response(prompt)
+        result = self._get_json_response(prompt, max_tokens=500)
         best_idea = None
         best_score = -1
         
         if result and "scores" in result:
-            for score_obj in result["scores"]:
-                if score_obj["score"] > best_score:
-                    best_score = score_obj["score"]
-                    best_idea = ideas[score_obj["index"]]
+            for i, score_obj in enumerate(result["scores"]):
+                # Handle cases where LLM just returns a list of numbers instead of objects
+                if isinstance(score_obj, (int, float)):
+                    score_val = float(score_obj)
+                    idx = i
+                elif isinstance(score_obj, dict):
+                    score_val = float(score_obj.get("score", 0))
+                    idx = int(score_obj.get("index", i))
+                else:
+                    continue
+                    
+                if score_val > best_score and idx < len(ideas):
+                    best_score = score_val
+                    best_idea = ideas[idx]
                     
         if not best_idea and ideas:
             # Fallback to the first idea if scoring fails
@@ -110,25 +121,40 @@ class ContentAgent:
         logger.info("Generating full content from the best idea...")
         prompt = f"""
         Based on the following story idea, generate a complete content package for a 10-second YouTube Short.
-        Language: {self.language} (The title, description, tags, and script should be in {self.language} where appropriate, or a mix of {self.language} and English).
+        Language: {self.language} (A modern, energetic mix of conversational {self.language} and English slang).
+        Audience: Kids on YouTube Shorts.
         Idea: {idea}
+        
+        CRITICAL CONTENT RULES:
+        1. Script & Dialogue: Write a tight script (approx 130-150 words). The language MUST feel natural to a 2026 audience: modern {self.language} heavily mixed with English coding/slang (casual, relatable, trendy memes mix, e.g. "Enduku ra mechanical text books chustav, update avvu"). Include audio/voiceover cues.
+        2. Character Prompt: Provide a highly detailed Image-Generation prompt for a 3D Pixar-style main character based on the story. Include specific clothes, age, skin tone, and expression.
+        3. Animation Prompts: Provide an array of shot-by-shot text-to-video animation prompts. Each prompt MUST start with "9:16 vertical aspect ratio. 3D animated cartoon style." and detail the specific camera motion, lighting, and action without morphing.
+        4. Title: Create an ultra-catchy, clickbaity YouTube Shorts title using emojis, caps, and engaging hooks.
+        5. Description: Write an engaging 3-4 sentence SEO description. Include a Call To Action (e.g. "Subscribe for more fun!"), a brief plot summary, and 5-8 relevant hashtags.
+        6. Tags: Generate EXACTLY 8 to 12 highly optimized YouTube SEO tags.
         
         CRITICAL JSON RULES:
         1. You MUST respond in strictly valid JSON format.
-        2. DO NOT include raw line breaks or unescaped characters inside the JSON strings.
-        3. Properly escape all quotes.
+        2. DO NOT split strings with unescaped commas outside of quotes. 
+        3. The "description" key MUST contain exactly ONE single string value.
+        4. DO NOT wrap the text in its own double quotes inside the JSON value. Example: Use "description": "Hello" NOT "description": ""Hello"".
+        5. DO NOT use any unescaped double quotes (\") anywhere inside the strings. Use single quotes (') instead if you need to quote something.
         
         You must respond with the following exact JSON structure:
         {{
-          "story": "A short summary of the story.",
-          "script": "The exact script/dialogue.",
-          "video_prompt": "A highly detailed prompt for an AI video generator (like Gemini or Sora) to create this video. This MUST be in English.",
-          "title": "A catchy YouTube title.",
-          "description": "YouTube description including hashtags.",
-          "tags": ["tag1", "tag2", "tag3"]
+          "story": "A short, energetic summary of the story.",
+          "script": "130-150 word script in 2026 modern Teluglish (casual, trendy, heavy English mix).",
+          "character_prompt": "A 3D Pixar-style animated character, [age, features, clothing, expression]. Hyper-detailed, 9:16 aspect ratio, cinematic lighting.",
+          "animation_prompts": [
+             "Scene 1: 9:16 vertical aspect ratio. 3D animated cartoon style. Close-up shot of...",
+             "Scene 2: 9:16 vertical aspect ratio. 3D animated cartoon style. Smooth pan showing..."
+          ],
+          "title": "A catchy, clickbaity YouTube title with emojis 🚀🔥",
+          "description": "Engaging YouTube description with CTA and hashtags. NO INTERNAL DOUBLE QUOTES.",
+          "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "... up to 12 tags"]
         }}
         """
-        result = self._get_json_response(prompt)
+        result = self._get_json_response(prompt, max_tokens=2500)
         return result
 
     def run_pipeline(self):
