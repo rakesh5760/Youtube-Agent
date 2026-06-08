@@ -20,32 +20,29 @@ class PromptAgent:
 
     def optimize_prompt(self, content):
         """
-        Combines the structured character and animation prompts from the content package 
-        into a single master prompt for Google Gemini Video generation.
+        Extracts the basic concept and formats it for Gemini to handle creatively.
         """
-        logger.info("Formatting video prompt for Gemini from structured content...")
+        logger.info("Formatting basic concept prompt for Gemini...")
         
-        character_prompt = content.get("character_prompt", "")
-        animation_prompts = content.get("animation_prompts", [])
+        story = content.get("story", "")
+        title = content.get("title", "")
         
-        if not character_prompt or not animation_prompts:
-            # Fallback for old content JSON formats
-            logger.warning("Missing structured prompts. Falling back to basic story prompt.")
-            story = content.get("story", "")
-            return f"9:16 vertical, 10 second duration, high quality 3D cartoon style. {story}"
+        if not story:
+            logger.error("No story provided to PromptAgent.")
+            return None
             
-        master_prompt = "Generate a single continuous 10-second vertical 9:16 video based on the following sequence:\n\n"
+        master_prompt = f"""Generate a 10-second 9:16 vertical 3D animated cartoon video.
         
-        master_prompt += "### CHARACTER DESIGN (Keep this character consistent throughout the video):\n"
-        master_prompt += f"{character_prompt}\n\n"
+Title: {title}
+Story/Concept: {story}
+
+CRITICAL CONSTRAINTS:
+- Language: All dialogue, text, or audio must be strictly in Telugu (and English/Teluglish).
+- Transformation: Ensure the requested transformation (e.g., objects changing shape/rearranging) is clearly visualized.
+- Creativity: Use your own creative internal logic to direct the scene, camera, and character designs!
+"""
         
-        master_prompt += "### SHOT-BY-SHOT ANIMATION SEQUENCE:\n"
-        for i, scene in enumerate(animation_prompts):
-            master_prompt += f"- Shot {i+1}: {scene}\n"
-            
-        master_prompt += "\nCRITICAL: Maintain smooth motion, 24fps, cinematic lighting, no morphing, crisp details."
-        
-        logger.info("Master prompt formatting complete.")
+        logger.info("Basic Gemini prompt formatted.")
         return master_prompt
 
 if __name__ == "__main__":
@@ -56,16 +53,13 @@ if __name__ == "__main__":
     agent = PromptAgent()
     
     sample_content = {
-        "character_prompt": "A 3D Pixar-style animated character, a 24-year-old South Indian male software engineer, curly black hair...",
-        "animation_prompts": [
-            "Scene 1: Close-up shot of an exhausted Indian techie character staring blankly at his computer screen.",
-            "Scene 2: The camera slowly zooms into his shocked expression as a red error notification pops up on screen."
-        ]
+        "title": "Super Car to Robot!",
+        "story": "A sleek red sports car speeds down the road and dramatically transforms into a giant robot by rearranging its parts."
     }
     optimized = agent.optimize_prompt(sample_content)
     
     if optimized:
-        print("\nOptimized Master Video Prompt:")
+        print("\nGemini Prompt:")
         print(optimized)
     else:
         print("Failed to optimize prompt.")

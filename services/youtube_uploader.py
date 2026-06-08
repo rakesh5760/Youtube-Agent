@@ -23,7 +23,7 @@ def upload_video(youtube, file_path, title, description, tags, category_id="27",
         },
         'status': {
             'privacyStatus': privacy_status,
-            'selfDeclaredMadeForKids': True  # Important for Kids channel
+            'selfDeclaredMadeForKids': False  # Allow broader audience reach
         }
     }
     

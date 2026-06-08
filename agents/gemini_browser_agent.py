@@ -48,9 +48,19 @@ class GeminiBrowserAgent:
                 # Use keyboard to type out the prompt to simulate human interaction and avoid clipboard issues
                 page.keyboard.insert_text(prompt)
                 
-                # Press Enter to submit
+                # Submit the prompt
                 time.sleep(1)
-                page.keyboard.press("Enter")
+                
+                # Locate and click the send button (Gemini usually uses aria-label="Send message")
+                send_button = page.locator("button[aria-label='Send message'], button[aria-label*='Send'], button[aria-label*='Submit']").first
+                if send_button.is_visible():
+                    logger.info("Clicking the Send button...")
+                    send_button.click()
+                else:
+                    logger.warning("Send button not found. Using keyboard fallback (Ctrl+Enter / Enter)...")
+                    page.keyboard.press("Control+Enter")
+                    time.sleep(0.5)
+                    page.keyboard.press("Enter")
                 
                 logger.info(f"Waiting for video generation to complete (timeout: {timeout_minutes} mins)...")
                 
