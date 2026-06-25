@@ -1,6 +1,6 @@
 import datetime
 import json
-from dateutil import parser
+from dateutil import parser, tz
 from services.youtube_auth import get_authenticated_service
 from services.logger import logger
 from config.config import config
@@ -60,7 +60,7 @@ def get_scheduled_videos(youtube):
 
 def get_schedule_info(youtube):
     """
-    Returns a dictionary containing the latest_date and next_date.
+    Returns a dictionary containing the latest_date and next_date correctly adjusted for local timezone.
     """
     logger.info("Inspecting YouTube schedule...")
     scheduled_dates = get_scheduled_videos(youtube)
@@ -68,11 +68,11 @@ def get_schedule_info(youtube):
     upload_time_str = config.channel_upload_time # "18:00"
     upload_hour, upload_minute = map(int, upload_time_str.split(':'))
     
-    now = datetime.datetime.now(datetime.timezone.utc)
+    # Get the configured local timezone
+    local_tz = tz.gettz(config.settings.get('channel', {}).get('timezone', 'Asia/Kolkata'))
+    now = datetime.datetime.now(local_tz)
     
     if not scheduled_dates:
-        # If no scheduled videos, the next date is either today (if time hasn't passed) or tomorrow
-        # For simplicity, we can default to tomorrow at the configured time
         logger.info("No scheduled videos found.")
         next_date = now + datetime.timedelta(days=1)
         next_date = next_date.replace(hour=upload_hour, minute=upload_minute, second=0, microsecond=0)
@@ -82,17 +82,19 @@ def get_schedule_info(youtube):
             "next_date": next_date.isoformat()
         }
         
-    # Find the maximum date
-    latest_dt = max(scheduled_dates)
+    # Find the maximum date and convert it to local timezone BEFORE replacing the time
+    latest_dt_utc = max(scheduled_dates)
+    latest_dt_local = latest_dt_utc.astimezone(local_tz)
     
     # The next date is exactly 1 day after the latest scheduled date
-    next_dt = latest_dt + datetime.timedelta(days=1)
-    # Ensure the time matches the configured time
-    next_dt = next_dt.replace(hour=upload_hour, minute=upload_minute, second=0, microsecond=0)
+    next_dt_local = latest_dt_local + datetime.timedelta(days=1)
+    
+    # Ensure the time matches the configured local time
+    next_dt_local = next_dt_local.replace(hour=upload_hour, minute=upload_minute, second=0, microsecond=0)
     
     result = {
-        "latest_date": latest_dt.isoformat(),
-        "next_date": next_dt.isoformat()
+        "latest_date": latest_dt_utc.isoformat(),
+        "next_date": next_dt_local.isoformat()
     }
     logger.info(f"Schedule info: {json.dumps(result, indent=2)}")
     return result
