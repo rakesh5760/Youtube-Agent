@@ -1,7 +1,6 @@
 YOUTOUBE AUTOMATION
 
-
-this project is created for the personal purpose, where i this project: we have automated our regular work into the aautomation using some of the code
+This project is created for the personal purpose, where i this project: we have automated our regular work into the aautomation using some of the code
 
 here the steps what this automation is able to do:
 
