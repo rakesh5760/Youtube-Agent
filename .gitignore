@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Generated files / output
+generated/
+videos/
+logs/
+
+# Database
+database/*.db
+
+# Credentials
+token.json
+credentials.json
+credentials/

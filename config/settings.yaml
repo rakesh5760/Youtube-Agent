@@ -10,4 +10,4 @@ content:
 
 buffer:
   min_days: 7
-  max_days: 30
+  max_days: 90

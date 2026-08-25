@@ -21,7 +21,7 @@ class ContentAgent:
         self.language = config.settings.get('channel', {}).get('language', 'Telugu')
         self.audience = config.settings.get('content', {}).get('audience', 'Kids')
         self.duration = config.settings.get('content', {}).get('duration', 10)
-        self.model = "llama-3.1-8b-instant" # Groq recommended fast model
+        self.model = "openai/gpt-oss-20b" # Groq recommended fast model
         
         self.characters = self._load_characters()
 
@@ -37,10 +37,21 @@ class ContentAgent:
             response = self.client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model=self.model,
-                response_format={"type": "json_object"},
                 max_tokens=max_tokens
             )
-            return json.loads(response.choices[0].message.content)
+            # Find the JSON block if the model included markdown formatting
+            content = response.choices[0].message.content
+            
+            # Clean up markdown JSON block if present
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+                
+            return json.loads(content.strip())
         except Exception as e:
             logger.error(f"Error calling Groq API: {e}")
             return None
